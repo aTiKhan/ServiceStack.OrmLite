@@ -169,9 +169,7 @@ namespace ServiceStack.OrmLite
             var q = dbCmd.GetDialectProvider().SqlExpression<T>();
             q.Where(where);
             q.PrepareUpdateStatement(dbCmd, updateFields);
-            commandFilter?.Invoke(dbCmd);
-
-            return dbCmd.ExecNonQuery();
+            return dbCmd.UpdateAndVerify<T>(commandFilter, updateFields.ContainsKey(ModelDefinition.RowVersionName));
         }
 
         internal static string GetUpdateOnlyWhereExpression<T>(this IOrmLiteDialectProvider dialectProvider, 
@@ -226,9 +224,7 @@ namespace ServiceStack.OrmLite
             Action<IDbCommand> commandFilter = null)
         {
             dbCmd.PrepareUpdateOnly<T>(updateFields, whereExpression, whereParams);
-            commandFilter?.Invoke(dbCmd);
-
-            return dbCmd.ExecNonQuery();
+            return dbCmd.UpdateAndVerify<T>(commandFilter, updateFields.ContainsKey(ModelDefinition.RowVersionName));
         }
 
         internal static void PrepareUpdateOnly<T>(this IDbCommand dbCmd, Dictionary<string, object> updateFields, string whereExpression, object[] whereParams)
@@ -327,7 +323,7 @@ namespace ServiceStack.OrmLite
                 sql
                     .Append(dialectProvider.GetQuotedColumnName(fieldDef.FieldName))
                     .Append("=")
-                    .Append(dialectProvider.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                    .Append(dialectProvider.GetUpdateParam(dbCmd, value, fieldDef));
             }
 
             dbCmd.CommandText = $"UPDATE {dialectProvider.GetQuotedTableName(modelDef)} " +
@@ -371,17 +367,17 @@ namespace ServiceStack.OrmLite
             return dbCmd;
         }
 
-        public static int Delete<T>(this IDbCommand dbCmd, Expression<Func<T, bool>> where)
+        public static int Delete<T>(this IDbCommand dbCmd, Expression<Func<T, bool>> where, Action<IDbCommand> commandFilter = null)
         {
             var ev = dbCmd.GetDialectProvider().SqlExpression<T>();
             ev.Where(where);
-            return dbCmd.Delete(ev);
+            return dbCmd.Delete(ev, commandFilter);
         }
 
-        public static int Delete<T>(this IDbCommand dbCmd, SqlExpression<T> where)
+        public static int Delete<T>(this IDbCommand dbCmd, SqlExpression<T> where, Action<IDbCommand> commandFilter = null)
         {
             var sql = where.ToDeleteRowStatement();
-            return dbCmd.ExecuteSql(sql, where.Params);
+            return dbCmd.ExecuteSql(sql, where.Params, commandFilter);
         }
 
         public static int DeleteWhere<T>(this IDbCommand dbCmd, string whereFilter, object[] whereParams)

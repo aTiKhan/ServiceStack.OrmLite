@@ -199,8 +199,7 @@ namespace ServiceStack.OrmLite.Oracle
             }
             catch (Exception ex)
             {
-                Log.Error("Error in {0}.ToDbValue() value '{1}' and Type '{2}'"
-                    .Fmt(converter.GetType().Name, value != null ? value.GetType().Name : "undefined", type.Name), ex);
+                Log.Error($"Error in {converter?.GetType().Name}.ToDbValue() value '{value.GetType().Name}' and Type '{type.Name}'", ex);
                 throw;
             }
 
@@ -218,8 +217,8 @@ namespace ServiceStack.OrmLite.Oracle
 
         internal string GetQuotedDateTimeOffsetValue(DateTimeOffset dateValue)
         {
-            var iso8601Format = string.Format("{0} {1}", GetIsoDateTimeFormat(dateValue.TimeOfDay), IsoTimeZoneFormat);
-            var oracleFormat = string.Format("{0} {1}", GetOracleDateTimeFormat(dateValue.TimeOfDay), OracleTimeZoneFormat);
+            var iso8601Format = $"{GetIsoDateTimeFormat(dateValue.TimeOfDay)} {IsoTimeZoneFormat}";
+            var oracleFormat = $"{GetOracleDateTimeFormat(dateValue.TimeOfDay)} {OracleTimeZoneFormat}";
             return string.Format("TO_TIMESTAMP_TZ({0}, {1})", base.GetQuotedValue(dateValue.ToString(iso8601Format), typeof(string)), base.GetQuotedValue(oracleFormat, typeof(string)));
         }
 
@@ -246,8 +245,8 @@ namespace ServiceStack.OrmLite.Oracle
             if (isStartOfDay) return dateFormat;
             var hasFractionalSeconds = (timeOfDay.Milliseconds != 0) || ((timeOfDay.Ticks % TimeSpan.TicksPerMillisecond) != 0);
             return hasFractionalSeconds 
-                ? string.Format("{0} {1}.{2}", dateFormat, timeFormat, millisecondFormat) 
-                : string.Format("{0} {1}", dateFormat, timeFormat);
+                ? $"{dateFormat} {timeFormat}.{millisecondFormat}"
+                : $"{dateFormat} {timeFormat}";
         }
 
         public override bool IsFullSelectStatement(string sqlFilter)
@@ -312,7 +311,7 @@ namespace ServiceStack.OrmLite.Oracle
                 try
                 {
                     sbColumnNames.Append(GetQuotedColumnName(fieldDef.FieldName));
-                    sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName)));
+                    sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName),fieldDef.CustomInsert));
 
                     AddParameter(dbCommand, fieldDef);
                 }
@@ -419,9 +418,9 @@ namespace ServiceStack.OrmLite.Oracle
 
                 try
                 {
-                    sbColumnNames.Append(string.Format("{0}", GetQuotedColumnName(fieldDef.FieldName)));
+                    sbColumnNames.Append($"{GetQuotedColumnName(fieldDef.FieldName)}");
                     if (!string.IsNullOrEmpty(fieldDef.Sequence) && dbCommand == null)
-                        sbColumnValues.Append(string.Format(":{0}", fieldDef.Name));
+                        sbColumnValues.Append($":{fieldDef.Name}");
                     else
                         sbColumnValues.Append(fieldDef.GetQuotedValue(objWithProperties));
                 }
@@ -476,7 +475,7 @@ namespace ServiceStack.OrmLite.Oracle
                 sql
                     .Append(GetQuotedColumnName(fieldDef.FieldName))
                     .Append("=")
-                    .Append(this.AddUpdateParam(dbCmd, fieldDef.GetValue(objWithProperties), fieldDef).ParameterName);
+                    .Append(this.GetUpdateParam(dbCmd, fieldDef.GetValue(objWithProperties), fieldDef));
             }
 
             var strFilter = StringBuilderCacheAlt.ReturnAndFree(sqlFilter);
@@ -1129,6 +1128,8 @@ namespace ServiceStack.OrmLite.Oracle
         }
 
         public override string SqlConcat(IEnumerable<object> args) => string.Join(" || ", args);
+
+        public override string SqlRandom => "dbms_random.value";
         
         protected OracleConnection Unwrap(IDbConnection db)
         {

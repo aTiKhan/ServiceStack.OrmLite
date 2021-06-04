@@ -584,12 +584,20 @@ namespace ServiceStack.OrmLite
         protected virtual bool ShouldSkipInsert(FieldDefinition fieldDef) => 
             fieldDef.ShouldSkipInsert();
 
+        public virtual string ColumnNameOnly(string columnExpr)
+        {
+            var nameOnly = columnExpr.LastRightPart('.');
+            var ret = nameOnly.StripDbQuotes();
+            return ret;
+        }
+
         public virtual FieldDefinition[] GetInsertFieldDefinitions(ModelDefinition modelDef, ICollection<string> insertFields)
         {
-            return insertFields != null 
+            var insertColumns = insertFields?.Map(ColumnNameOnly);
+            return insertColumns != null 
                 ? NamingStrategy.GetType() == typeof(OrmLiteNamingStrategyBase) 
-                    ? modelDef.GetOrderedFieldDefinitions(insertFields)
-                    : modelDef.GetOrderedFieldDefinitions(insertFields, name => NamingStrategy.GetColumnName(name)) 
+                    ? modelDef.GetOrderedFieldDefinitions(insertColumns)
+                    : modelDef.GetOrderedFieldDefinitions(insertColumns, name => NamingStrategy.GetColumnName(name)) 
                 : modelDef.FieldDefinitionsArray;
         }
 
@@ -677,7 +685,7 @@ namespace ServiceStack.OrmLite
                 try
                 {
                     sbColumnNames.Append(GetQuotedColumnName(fieldDef.FieldName));
-                    sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName)));
+                    sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName),fieldDef.CustomInsert));
 
                     var p = AddParameter(cmd, fieldDef);
 
@@ -721,7 +729,7 @@ namespace ServiceStack.OrmLite
                 try
                 {
                     sbColumnNames.Append(GetQuotedColumnName(fieldDef.FieldName));
-                    sbColumnValues.Append(this.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                    sbColumnValues.Append(this.GetInsertParam(dbCmd, value, fieldDef));
                 }
                 catch (Exception ex)
                 {
@@ -812,7 +820,7 @@ namespace ServiceStack.OrmLite
                     sql
                         .Append(GetQuotedColumnName(fieldDef.FieldName))
                         .Append("=")
-                        .Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName)));
+                        .Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName), fieldDef.CustomUpdate));
 
                     AddParameter(cmd, fieldDef);
                 }
@@ -929,6 +937,12 @@ namespace ServiceStack.OrmLite
 
         public virtual void DisableIdentityInsert<T>(IDbCommand cmd) {}
         public virtual Task DisableIdentityInsertAsync<T>(IDbCommand cmd, CancellationToken token=default) => TypeConstants.EmptyTask;
+
+        public virtual void EnableForeignKeysCheck(IDbCommand cmd) {}
+        public virtual Task EnableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token=default) => TypeConstants.EmptyTask;
+
+        public virtual void DisableForeignKeysCheck(IDbCommand cmd) {}
+        public virtual Task DisableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token=default) => TypeConstants.EmptyTask;
 
         public virtual void SetParameterValues<T>(IDbCommand dbCmd, object obj)
         {
@@ -1085,7 +1099,7 @@ namespace ServiceStack.OrmLite
                     sql
                         .Append(GetQuotedColumnName(fieldDef.FieldName))
                         .Append("=")
-                        .Append(this.AddUpdateParam(dbCmd, fieldDef.GetValue(objWithProperties), fieldDef).ParameterName);
+                        .Append(this.GetUpdateParam(dbCmd, fieldDef.GetValue(objWithProperties), fieldDef));
                 }
                 catch (Exception ex)
                 {
@@ -1122,7 +1136,7 @@ namespace ServiceStack.OrmLite
                     sql
                         .Append(GetQuotedColumnName(fieldDef.FieldName))
                         .Append("=")
-                        .Append(this.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                        .Append(this.GetUpdateParam(dbCmd, value, fieldDef));
                 }
                 catch (Exception ex)
                 {
@@ -1165,14 +1179,14 @@ namespace ServiceStack.OrmLite
                             .Append("=")
                             .Append(quotedFieldName)
                             .Append("+")
-                            .Append(this.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                            .Append(this.GetUpdateParam(dbCmd, value, fieldDef));
                     }
                     else
                     {
                         sql
                             .Append(quotedFieldName)
                             .Append("=")
-                            .Append(this.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                            .Append(this.GetUpdateParam(dbCmd, value, fieldDef));
                     }
                 }
                 catch (Exception ex)
@@ -1259,6 +1273,11 @@ namespace ServiceStack.OrmLite
         public abstract string ToCreateSchemaStatement(string schemaName);
 
         public abstract bool DoesSchemaExist(IDbCommand dbCmd, string schemaName);
+
+        public virtual Task<bool> DoesSchemaExistAsync(IDbCommand dbCmd, string schema, CancellationToken token = default)
+        {
+            return DoesSchemaExist(dbCmd, schema).InTask();
+        }
 
         public virtual string ToCreateTableStatement(Type tableType)
         {
@@ -1406,9 +1425,19 @@ namespace ServiceStack.OrmLite
             return db.Exec(dbCmd => DoesTableExist(dbCmd, tableName, schema));
         }
 
+        public virtual async Task<bool> DoesTableExistAsync(IDbConnection db, string tableName, string schema = null, CancellationToken token = default)
+        {
+            return await db.Exec(async dbCmd => await DoesTableExistAsync(dbCmd, tableName, schema, token));
+        }
+
         public virtual bool DoesTableExist(IDbCommand dbCmd, string tableName, string schema = null)
         {
             throw new NotImplementedException();
+        }
+
+        public virtual Task<bool> DoesTableExistAsync(IDbCommand dbCmd, string tableName, string schema = null, CancellationToken token = default)
+        {
+            return DoesTableExist(dbCmd, tableName, schema).InTask();
         }
 
         public virtual bool DoesColumnExist(IDbConnection db, string columnName, string tableName, string schema = null)
@@ -1416,9 +1445,19 @@ namespace ServiceStack.OrmLite
             throw new NotImplementedException();
         }
 
+        public virtual Task<bool> DoesColumnExistAsync(IDbConnection db, string columnName, string tableName, string schema = null, CancellationToken token = default)
+        {
+            return DoesColumnExist(db, columnName, tableName, schema).InTask();
+        }
+
         public virtual bool DoesSequenceExist(IDbCommand dbCmd, string sequenceName)
         {
             throw new NotImplementedException();
+        }
+
+        public virtual Task<bool> DoesSequenceExistAsync(IDbCommand dbCmd, string sequenceName, CancellationToken token = default)
+        {
+            return DoesSequenceExist(dbCmd, sequenceName).InTask();
         }
 
         protected virtual string GetIndexName(bool isUnique, string modelName, string fieldName)
@@ -1461,10 +1500,9 @@ namespace ServiceStack.OrmLite
             return "";
         }
 
-        public virtual List<string> SequenceList(Type tableType)
-        {
-            return new List<string>();
-        }
+        public virtual List<string> SequenceList(Type tableType) => new List<string>();
+
+        public virtual Task<List<string>> SequenceListAsync(Type tableType, CancellationToken token = default) => new List<string>().InTask();
 
         // TODO : make abstract  ??
         public virtual string ToExistStatement(Type fromTableType,
@@ -1584,7 +1622,7 @@ namespace ServiceStack.OrmLite
 
         public virtual string GetQuotedValue(object value, Type fieldType)
         {
-            if (value == null) 
+            if (value == null || value == DBNull.Value) 
                 return "NULL";
 
             var converter = value.GetType().IsEnum
@@ -1668,7 +1706,9 @@ namespace ServiceStack.OrmLite
         
         public virtual string SqlCast(object fieldOrValue, string castAs) => $"CAST({fieldOrValue} AS {castAs})";
 
-        //Async API's, should be overrided by Dialect Providers to use .ConfigureAwait(false)
+        public virtual string SqlRandom => "RAND()";
+
+        //Async API's, should be overriden by Dialect Providers to use .ConfigureAwait(false)
         //Default impl below uses TaskAwaiter shim in async.cs
 
         public virtual Task OpenAsync(IDbConnection db, CancellationToken token = default)

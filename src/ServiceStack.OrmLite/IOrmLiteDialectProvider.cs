@@ -141,6 +141,11 @@ namespace ServiceStack.OrmLite
         void DisableIdentityInsert<T>(IDbCommand cmd);
         Task DisableIdentityInsertAsync<T>(IDbCommand cmd, CancellationToken token=default);
 
+        void EnableForeignKeysCheck(IDbCommand cmd);
+        Task EnableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token=default);
+        void DisableForeignKeysCheck(IDbCommand cmd);
+        Task DisableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token=default);
+
         Dictionary<string, FieldDefinition> GetFieldDefinitionMap(ModelDefinition modelDef);
 
         object GetFieldValue(FieldDefinition fieldDef, object value);
@@ -180,12 +185,18 @@ namespace ServiceStack.OrmLite
         string ToCreateSequenceStatement(Type tableType, string sequenceName);
 
         List<string> SequenceList(Type tableType);
+        Task<List<string>> SequenceListAsync(Type tableType, CancellationToken token=default);
         
         bool DoesSchemaExist(IDbCommand dbCmd, string schema);
+        Task<bool> DoesSchemaExistAsync(IDbCommand dbCmd, string schema, CancellationToken token=default);
         bool DoesTableExist(IDbConnection db, string tableName, string schema = null);
+        Task<bool> DoesTableExistAsync(IDbConnection db, string tableName, string schema = null, CancellationToken token=default);
         bool DoesTableExist(IDbCommand dbCmd, string tableName, string schema = null);
+        Task<bool> DoesTableExistAsync(IDbCommand dbCmd, string tableName, string schema = null, CancellationToken token=default);
         bool DoesColumnExist(IDbConnection db, string columnName, string tableName, string schema = null);
+        Task<bool> DoesColumnExistAsync(IDbConnection db, string columnName, string tableName, string schema = null, CancellationToken token=default);
         bool DoesSequenceExist(IDbCommand dbCmd, string sequenceName);
+        Task<bool> DoesSequenceExistAsync(IDbCommand dbCmd, string sequenceName, CancellationToken token=default);
 
         void DropColumn(IDbConnection db, Type modelType, string columnName);
 
@@ -239,7 +250,7 @@ namespace ServiceStack.OrmLite
         /// <summary>
         /// Return table, row count SQL for listing all tables with their row counts
         /// </summary>
-        /// <param name="live">If true returns live current rowc ounts of each table (slower), otherwise returns cached row counts from RDBMS table stats</param>
+        /// <param name="live">If true returns live current row counts of each table (slower), otherwise returns cached row counts from RDBMS table stats</param>
         /// <param name="schema">The table schema if any</param>
         /// <returns></returns>
         string ToTableNamesWithRowCountsStatement(bool live, string schema);
@@ -252,5 +263,6 @@ namespace ServiceStack.OrmLite
         string SqlBool(bool value);
         string SqlLimit(int? offset = null, int? rows = null);
         string SqlCast(object fieldOrValue, string castAs);
+        string SqlRandom { get; }
     }
 }

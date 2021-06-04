@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 using ServiceStack.Data;
+using ServiceStack.Text;
 
 namespace ServiceStack.OrmLite
 {
@@ -27,7 +28,7 @@ namespace ServiceStack.OrmLite
             this.DialectProvider = factory.DialectProvider;
         }
 
-        public IDbConnection DbConnection => dbConnection ?? (dbConnection = ConnectionString.ToDbConnection(Factory.DialectProvider));
+        public IDbConnection DbConnection => dbConnection ??= ConnectionString.ToDbConnection(Factory.DialectProvider);
 
         public void Dispose()
         {
@@ -97,7 +98,7 @@ namespace ServiceStack.OrmLite
 
             if (DbConnection.State == ConnectionState.Closed)
             {
-                await DialectProvider.OpenAsync(DbConnection, token);
+                await DialectProvider.OpenAsync(DbConnection, token).ConfigAwait();
                 //so the internal connection is wrapped for example by miniprofiler
                 if (Factory.ConnectionFilter != null)
                     dbConnection = Factory.ConnectionFilter(dbConnection);
@@ -130,5 +131,14 @@ namespace ServiceStack.OrmLite
     internal interface ISetDbTransaction
     {
         IDbTransaction Transaction { get; set; }
+    }
+
+    public static class OrmLiteConnectionUtils
+    {
+        public static bool InTransaction(this IDbConnection db) => 
+            db is IHasDbTransaction setDb && setDb.DbTransaction != null;
+
+        public static IDbTransaction GetTransaction(this IDbConnection db) => 
+            db is IHasDbTransaction setDb ? setDb.DbTransaction : null;
     }
 }

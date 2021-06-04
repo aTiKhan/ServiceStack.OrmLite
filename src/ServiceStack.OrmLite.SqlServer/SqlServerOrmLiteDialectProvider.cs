@@ -131,6 +131,13 @@ namespace ServiceStack.OrmLite.SqlServer
             return result > 0; 
         }
 
+        public override async Task<bool> DoesSchemaExistAsync(IDbCommand dbCmd, string schemaName, CancellationToken token = default)
+        {
+            var sql = $"SELECT count(*) FROM sys.schemas WHERE name = '{schemaName.SqlParam()}'";
+            var result = await dbCmd.ExecLongScalarAsync(sql, token);
+            return result > 0; 
+        }
+
         public override string ToCreateSchemaStatement(string schemaName)
         {
             var sql = $"CREATE SCHEMA [{GetSchemaName(schemaName)}]";
@@ -152,6 +159,21 @@ namespace ServiceStack.OrmLite.SqlServer
             return result > 0;
         }
 
+        public override async Task<bool> DoesTableExistAsync(IDbCommand dbCmd, string tableName, string schema = null, CancellationToken token = default)
+        {
+            var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = {0}"
+                .SqlFmt(this, tableName);
+
+            if (schema != null)
+                sql += " AND TABLE_SCHEMA = {0}".SqlFmt(this, schema);
+            else
+                sql += " AND TABLE_SCHEMA <> 'Security'";
+
+            var result = await dbCmd.ExecLongScalarAsync(sql, token);
+
+            return result > 0;
+        }
+
         public override bool DoesColumnExist(IDbConnection db, string columnName, string tableName, string schema = null)
         {
             var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName AND COLUMN_NAME = @columnName"
@@ -161,6 +183,20 @@ namespace ServiceStack.OrmLite.SqlServer
                 sql += " AND TABLE_SCHEMA = @schema";
 
             var result = db.SqlScalar<long>(sql, new { tableName, columnName, schema });
+
+            return result > 0;
+        }
+
+        public override async Task<bool> DoesColumnExistAsync(IDbConnection db, string columnName, string tableName, string schema = null,
+            CancellationToken token = default)
+        {
+            var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName AND COLUMN_NAME = @columnName"
+                .SqlFmt(this, tableName, columnName);
+
+            if (schema != null)
+                sql += " AND TABLE_SCHEMA = @schema";
+
+            var result = await db.SqlScalarAsync<long>(sql, new { tableName, columnName, schema }, token: token);
 
             return result > 0;
         }
@@ -443,7 +479,7 @@ namespace ServiceStack.OrmLite.SqlServer
                     }
                     else
                     {
-                        sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName)));
+                        sbColumnValues.Append(this.GetParam(SanitizeFieldNameForParamName(fieldDef.FieldName),fieldDef.CustomInsert));
                         AddParameter(cmd, fieldDef);
                     }
                 }
@@ -505,7 +541,7 @@ namespace ServiceStack.OrmLite.SqlServer
                 try
                 {
                     sbColumnNames.Append(GetQuotedColumnName(fieldDef.FieldName));
-                    sbColumnValues.Append(this.AddUpdateParam(dbCmd, value, fieldDef).ParameterName);
+                    sbColumnValues.Append(this.GetInsertParam(dbCmd, value, fieldDef));
                 }
                 catch (Exception ex)
                 {
@@ -648,6 +684,15 @@ namespace ServiceStack.OrmLite.SqlServer
                 ? $"CAST({fieldOrValue} AS VARCHAR(MAX))"
                 : $"CAST({fieldOrValue} AS {castAs})";
 
+        public override string SqlRandom => "NEWID()";
+
+        public override void EnableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("EXEC sp_msforeachtable \"ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all\"");
+        public override Task EnableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+            cmd.ExecNonQueryAsync("EXEC sp_msforeachtable \"ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all\"", null, token);
+        public override void DisableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("EXEC sp_msforeachtable \"ALTER TABLE ? NOCHECK CONSTRAINT all\"");
+        public override Task DisableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+            cmd.ExecNonQueryAsync("EXEC sp_msforeachtable \"ALTER TABLE ? NOCHECK CONSTRAINT all\"", null, token);
+        
         protected SqlConnection Unwrap(IDbConnection db) => (SqlConnection)db.ToDbConnection();
 
         protected SqlCommand Unwrap(IDbCommand cmd) => (SqlCommand)cmd.ToDbCommand();

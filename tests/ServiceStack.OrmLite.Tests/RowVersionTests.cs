@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
@@ -47,6 +48,17 @@ namespace ServiceStack.OrmLite.Tests
         [RowVersion]
         [Alias("TheVersion")]
         public long Version { get; set; }
+    }
+
+    [Alias("ModelAlias")]
+    public class ModelWithAlias
+    {
+        [Alias("ModelId")]
+        [AutoIncrement]
+        public int Id { get; set; }
+        
+        [Alias("IntAlias")]
+        public int IntField { get; set; }
     }
 
     [Schema("Schema")]
@@ -220,6 +232,62 @@ namespace ServiceStack.OrmLite.Tests
             Assert.That(wasInserted, Is.True);
             var actualRow = db.SingleById<ModelWithRowVersion>(row.Id);
             Assert.That(row.RowVersion, Is.EqualTo(actualRow.RowVersion));
+        }
+
+        [Test]
+        public async Task Can_Save_new_row_and_retrieve_rowversion_Async()
+        {
+            var row = new ModelWithRowVersion { Text = "First" };
+
+            bool wasInserted = await db.SaveAsync(row);
+
+            Assert.That(wasInserted, Is.True);
+            var actualRow = await db.SingleByIdAsync<ModelWithRowVersion>(row.Id);
+            Assert.That(row.RowVersion, Is.EqualTo(actualRow.RowVersion));
+        }
+        
+        public class ModelWithAutoGuidAndRowVersion
+        {
+            [AutoId]
+            public Guid Id { get; set; }
+            public string Name { get; set; }
+            public ulong RowVersion { get; set; }
+        }
+
+        [Test]
+        public void Can_Save_ModelWithAutoGuidAndRowVersion()
+        {
+            db.DropAndCreateTable<ModelWithAutoGuidAndRowVersion>();
+            var row = new ModelWithAutoGuidAndRowVersion { Name = "A" };
+            
+            Assert.That(db.Save(row));
+
+            var dbRow = db.SingleById<ModelWithAutoGuidAndRowVersion>(row.Id);
+            Assert.That(dbRow.Name, Is.EqualTo(row.Name));
+
+            dbRow.Name = "B";
+            db.Save(dbRow);
+
+            dbRow = db.SingleById<ModelWithAutoGuidAndRowVersion>(row.Id);
+            Assert.That(dbRow.Name, Is.EqualTo("B"));
+        }
+
+        [Test]
+        public async Task Can_Save_ModelWithAutoGuidAndRowVersion_Async()
+        {
+            db.DropAndCreateTable<ModelWithAutoGuidAndRowVersion>();
+            var row = new ModelWithAutoGuidAndRowVersion { Name = "A" };
+            
+            Assert.That(await db.SaveAsync(row));
+
+            var dbRow = await db.SingleByIdAsync<ModelWithAutoGuidAndRowVersion>(row.Id);
+            Assert.That(dbRow.Name, Is.EqualTo(row.Name));
+
+            dbRow.Name = "B";
+            await db.SaveAsync(dbRow);
+
+            dbRow = await db.SingleByIdAsync<ModelWithAutoGuidAndRowVersion>(row.Id);
+            Assert.That(dbRow.Name, Is.EqualTo("B"));
         }
 
         [Test]

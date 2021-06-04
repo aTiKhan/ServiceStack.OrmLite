@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using ServiceStack.OrmLite.Sqlite.Converters;
 using ServiceStack.Text;
 
@@ -17,7 +19,7 @@ namespace ServiceStack.OrmLite.Sqlite
             base.InitColumnTypeMap();
 
             OrmLiteConfig.DeoptimizeReader = true;
-            base.RegisterConverter<DateTime>(new SqliteSystemDataDateTimeConverter());
+            base.RegisterConverter<DateTime>(new SqliteCoreDateTimeConverter());
             //Old behavior using native sqlite3.dll
             //base.RegisterConverter<DateTime>(new SqliteNativeDateTimeConverter());
 
@@ -243,6 +245,16 @@ namespace ServiceStack.OrmLite.Sqlite
         public override string SqlCurrency(string fieldOrValue, string currencySymbol) => SqlConcat(new []{ "'" + currencySymbol + "'", "printf(\"%.2f\", " + fieldOrValue + ")" });
 
         public override string SqlBool(bool value) => value ? "1" : "0";
+
+        public override string SqlRandom => "random()";
+
+        public override void EnableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("PRAGMA foreign_keys = ON;");
+        public override Task EnableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+            cmd.ExecNonQueryAsync("PRAGMA foreign_keys = ON;", null, token);
+
+        public override void DisableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("PRAGMA foreign_keys = OFF;");
+        public override Task DisableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+            cmd.ExecNonQueryAsync("PRAGMA foreign_keys = OFF;", null, token);
     }
 
     public static class SqliteExtensions

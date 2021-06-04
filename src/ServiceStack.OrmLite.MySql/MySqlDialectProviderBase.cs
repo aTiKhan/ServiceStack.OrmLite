@@ -417,24 +417,46 @@ namespace ServiceStack.OrmLite.MySql
         
         public override bool DoesTableExist(IDbCommand dbCmd, string tableName, string schema = null)
         {
-            var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = {0} AND TABLE_SCHEMA = {1}"
-                .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), dbCmd.Connection.Database);
+	        var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = {0} AND TABLE_SCHEMA = {1}"
+		        .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), dbCmd.Connection.Database);
 
-            var result = dbCmd.ExecLongScalar(sql);
+	        var result = dbCmd.ExecLongScalar(sql);
 
-            return result > 0;
+	        return result > 0;
+        }
+
+        public override async Task<bool> DoesTableExistAsync(IDbCommand dbCmd, string tableName, string schema = null, CancellationToken token=default)
+        {
+	        var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = {0} AND TABLE_SCHEMA = {1}"
+		        .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), dbCmd.Connection.Database);
+
+	        var result = await dbCmd.ExecLongScalarAsync(sql, token);
+
+	        return result > 0;
         }
 
         public override bool DoesColumnExist(IDbConnection db, string columnName, string tableName, string schema = null)
         {
-            tableName = GetTableName(tableName, schema);
-            var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
-                      + " WHERE TABLE_NAME = @tableName AND COLUMN_NAME = @columnName AND TABLE_SCHEMA = @schema"
-                          .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), columnName);
+	        tableName = GetTableName(tableName, schema).StripQuotes();
+	        var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+	                  + " WHERE TABLE_NAME = @tableName AND COLUMN_NAME = @columnName AND TABLE_SCHEMA = @schema"
+		                  .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), columnName);
             
-            var result = db.SqlScalar<long>(sql, new { tableName, columnName, schema = db.Database });
+	        var result = db.SqlScalar<long>(sql, new { tableName, columnName, schema = db.Database });
 
-            return result > 0;
+	        return result > 0;
+        }
+
+        public override async Task<bool> DoesColumnExistAsync(IDbConnection db, string columnName, string tableName, string schema = null, CancellationToken token=default)
+        {
+	        tableName = GetTableName(tableName, schema).StripQuotes();
+	        var sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+	                  + " WHERE TABLE_NAME = @tableName AND COLUMN_NAME = @columnName AND TABLE_SCHEMA = @schema"
+		                  .SqlFmt(GetTableName(tableName, schema).StripDbQuotes(), columnName);
+            
+	        var result = await db.SqlScalarAsync<long>(sql, new { tableName, columnName, schema = db.Database }, token);
+
+	        return result > 0;
         }
 
         public override string ToCreateTableStatement(Type tableType)
@@ -531,6 +553,13 @@ namespace ServiceStack.OrmLite.MySql
                 : $"CAST({fieldOrValue} AS {castAs})";
 
         public override string SqlBool(bool value) => value ? "1" : "0";
+
+        public override void EnableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("SET FOREIGN_KEY_CHECKS=1;");
+        public override Task EnableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+	        cmd.ExecNonQueryAsync("SET FOREIGN_KEY_CHECKS=1;", null, token);
+        public override void DisableForeignKeysCheck(IDbCommand cmd) => cmd.ExecNonQuery("SET FOREIGN_KEY_CHECKS=0;");
+        public override Task DisableForeignKeysCheckAsync(IDbCommand cmd, CancellationToken token = default) => 
+	        cmd.ExecNonQueryAsync("SET FOREIGN_KEY_CHECKS=0;", null, token);
 
         protected DbConnection Unwrap(IDbConnection db)
         {
